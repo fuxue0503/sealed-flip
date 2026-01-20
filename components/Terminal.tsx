@@ -53,26 +53,30 @@ const PositionsTable: React.FC<{ userAsset: UserAsset }> = ({ userAsset }) => (
 
 const Terminal: React.FC<{ state: MarketState; userAsset: UserAsset }> = ({ state, userAsset }) => {
   const [activeTab, setActiveTab] = useState<'chart' | 'depth'>('chart');
+  const [mobileTab, setMobileTab] = useState<'chart' | 'depth' | 'trade'>('chart');
 
   return (
     <div className="flex flex-col h-full bg-[#0b0e11] text-gray-300 font-sans select-none overflow-hidden relative">
       {/* 1. Top Ticker Bar */}
-      <div className="h-14 border-b border-white/5 bg-[#15191e] flex items-center px-4 gap-8 shrink-0 relative z-20">
-        <div className="flex items-center gap-2 group cursor-pointer">
-          <div className="w-8 h-8 rounded bg-blue-600 flex items-center justify-center text-white"><Star size={16} fill="currentColor" /></div>
-          <div className="flex flex-col">
-            <span className="text-sm font-black text-white italic tracking-tighter uppercase flex items-center gap-1">
+      <div className="h-14 border-b border-white/5 bg-[#15191e] flex items-center px-4 gap-4 md:gap-8 shrink-0 relative z-20 justify-between md:justify-start">
+        <div className="flex items-center gap-2 group cursor-pointer min-w-0">
+          <div className="w-8 h-8 rounded bg-blue-600 flex items-center justify-center text-white shrink-0"><Star size={16} fill="currentColor" /></div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-black text-white italic tracking-tighter uppercase flex items-center gap-1 truncate">
               {state.asset} <ChevronDown size={14} className="text-gray-500" />
             </span>
-            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Live 24*7</span>
+            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest hidden md:block">Live 24*7</span>
           </div>
         </div>
 
-        <div className="flex flex-col">
+        <div className="flex flex-col text-right md:text-left shrink-0">
           <span className={`text-lg font-black font-mono leading-none ${state.change24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
             ${state.price.toFixed(2)}
           </span>
-          <span className="text-[10px] text-gray-500 font-bold italic">${state.price.toFixed(2)}</span>
+          <span className="text-[10px] text-gray-500 font-bold italic hidden md:block">${state.price.toFixed(2)}</span>
+          <span className={`text-[10px] font-bold font-mono md:hidden ${state.change24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+            {state.change24h >= 0 ? '+' : ''}{state.change24h}%
+          </span>
         </div>
 
         <div className="hidden md:flex gap-6">
@@ -97,33 +101,43 @@ const Terminal: React.FC<{ state: MarketState; userAsset: UserAsset }> = ({ stat
         </div>
       </div>
 
-      <div className="flex-1 flex min-h-0 border-b border-white/5 overflow-hidden">
-        {/* 2. Main Content (Chart + Bottom Panels) */}
-        <div className="flex-1 flex flex-col min-w-0 border-r border-white/5 h-full relative">
+      <div className="flex-1 flex flex-col md:flex-row min-h-0 border-b border-white/5 overflow-hidden relative">
+        {/* 2. Main Content (Chart + Bottom Panels) 
+            On Mobile: Only show if mobileTab is 'chart'
+            On Desktop: Always show
+        */}
+        <div className={`flex-1 flex-col min-w-0 border-r border-white/5 h-full relative ${mobileTab === 'chart' ? 'flex' : 'hidden md:flex'}`}>
           {/* Chart Section */}
           <div className="flex-1 flex flex-col min-h-0 relative z-0">
-            <div className="h-9 border-b border-white/5 flex items-center px-4 bg-[#0b0e11] gap-4 shrink-0">
-              <div className="flex gap-0.5">
+            <div className="h-9 border-b border-white/5 flex items-center px-4 bg-[#0b0e11] gap-4 shrink-0 overflow-x-auto no-scrollbar">
+              <div className="flex gap-0.5 shrink-0">
                 {['1m', '5m', '15m', '1H', '4H', '1D'].map(tf => (
                   <button key={tf} className={`px-2 py-1 text-[10px] font-bold hover:bg-white/5 rounded ${tf === '1H' ? 'text-blue-400' : 'text-gray-500'}`}>{tf}</button>
                 ))}
               </div>
-              <div className="h-4 w-[1px] bg-white/10"></div>
-              <button className="text-[10px] font-bold text-gray-500 flex items-center gap-1 hover:text-white"><List size={12} /> Indicators</button>
+              <div className="h-4 w-[1px] bg-white/10 shrink-0"></div>
+              <button className="text-[10px] font-bold text-gray-500 flex items-center gap-1 hover:text-white shrink-0"><List size={12} /> Indicators</button>
             </div>
             <div className="flex-1 bg-[#0b0e11] w-full h-full relative overflow-hidden">
               <KlineChart currentPrice={state.price} />
             </div>
           </div>
 
-          {/* Bottom Panels (Positions) - Pinned to bottom, z-index to ensure it sits on top if items scroll, but separated by flex */}
-          <div className="h-64 shrink-0 border-t border-white/5 bg-[#0b0e11] relative z-10">
+          {/* Bottom Panels (Positions) */}
+          <div className="h-64 shrink-0 border-t border-white/5 bg-[#0b0e11] relative z-10 hidden md:block">
+            <PositionsTable userAsset={userAsset} />
+          </div>
+          {/* Mobile Position Info (Simplified or same) */}
+          <div className="h-48 shrink-0 border-t border-white/5 bg-[#0b0e11] relative z-10 block md:hidden">
             <PositionsTable userAsset={userAsset} />
           </div>
         </div>
 
-        {/* 3. Order Book & Recent Trades */}
-        <div className="w-72 hidden xl:flex flex-col border-r border-white/5 shrink-0 bg-[#0b0e11]">
+        {/* 3. Order Book & Recent Trades 
+            On Mobile: Only show if mobileTab is 'depth'
+            On Desktop: Always show
+        */}
+        <div className={`w-full md:w-72 flex-col border-r border-white/5 shrink-0 bg-[#0b0e11] ${mobileTab === 'depth' ? 'flex' : 'hidden xl:flex'}`}>
           <div className="flex-1 min-h-0 flex flex-col">
             <OrderBook state={state} />
           </div>
@@ -154,14 +168,42 @@ const Terminal: React.FC<{ state: MarketState; userAsset: UserAsset }> = ({ stat
           </div>
         </div>
 
-        {/* 4. Trade Entry Panel */}
-        <div className="w-80 shrink-0 bg-[#15191e] flex flex-col p-4 overflow-y-auto z-20">
+        {/* 4. Trade Entry Panel 
+            On Mobile: Only show if mobileTab is 'trade'
+            On Desktop: Always show
+        */}
+        <div className={`w-full md:w-80 shrink-0 bg-[#15191e] flex-col p-4 overflow-y-auto z-20 ${mobileTab === 'trade' ? 'flex' : 'hidden md:flex'}`}>
           <TradePanel state={state} userAsset={userAsset} />
         </div>
       </div>
 
-      {/* 5. Status Bar */}
-      <div className="h-6 bg-[#0b0e11] border-t border-white/5 px-3 flex items-center justify-between text-[9px] font-black uppercase text-gray-600 tracking-widest shrink-0">
+      {/* Mobile Bottom Tab Bar */}
+      <div className="md:hidden h-14 bg-[#15191e] border-t border-white/10 flex items-center justify-around px-2 shrink-0 z-50">
+        <button
+          onClick={() => setMobileTab('chart')}
+          className={`flex flex-col items-center gap-1 p-2 ${mobileTab === 'chart' ? 'text-blue-500' : 'text-gray-500'}`}
+        >
+          <TrendingUp size={18} />
+          <span className="text-[9px] font-black uppercase tracking-widest">Chart</span>
+        </button>
+        <button
+          onClick={() => setMobileTab('depth')}
+          className={`flex flex-col items-center gap-1 p-2 ${mobileTab === 'depth' ? 'text-blue-500' : 'text-gray-500'}`}
+        >
+          <List size={18} />
+          <span className="text-[9px] font-black uppercase tracking-widest">Depth</span>
+        </button>
+        <button
+          onClick={() => setMobileTab('trade')}
+          className={`flex flex-col items-center gap-1 p-2 ${mobileTab === 'trade' ? 'text-blue-500' : 'text-gray-500'}`}
+        >
+          <Sparkles size={18} />
+          <span className="text-[9px] font-black uppercase tracking-widest">Trade</span>
+        </button>
+      </div>
+
+      {/* 5. Status Bar - Hidden on mobile to save space */}
+      <div className="hidden md:flex h-6 bg-[#0b0e11] border-t border-white/5 px-3 items-center justify-between text-[9px] font-black uppercase text-gray-600 tracking-widest shrink-0">
         <div className="flex gap-4">
           <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div> Stable Connection</span>
           <span>Latency: 12ms</span>
