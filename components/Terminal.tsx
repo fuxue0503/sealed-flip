@@ -112,7 +112,7 @@ const Terminal: React.FC<{ state: MarketState; userAsset: UserAsset }> = ({ stat
               <button className="text-[10px] font-bold text-gray-500 flex items-center gap-1 hover:text-white"><List size={12} /> Indicators</button>
             </div>
             <div className="flex-1 bg-[#0b0e11] w-full h-full relative overflow-hidden">
-              <KlineChart />
+              <KlineChart currentPrice={state.price} />
             </div>
           </div>
 

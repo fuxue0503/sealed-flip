@@ -10,23 +10,59 @@ interface ChartData {
   volume: number;
 }
 
-const generateMockData = (): ChartData[] => {
+const generateMockData = (currentPrice: number): ChartData[] => {
   const data: ChartData[] = [];
-  let prevClose = 165;
   const now = Math.floor(Date.now() / 1000);
   const fiveMin = 300;
 
+  // Create a temporary array of changes
+  const changes = [];
+  let cumulativeChange = 0;
+
+  // We want 500 points
+  for (let i = 0; i < 499; i++) {
+    const change = (Math.random() * 10 - 5);
+    changes.push(change);
+    cumulativeChange += change;
+  }
+
+  // The last price is currentPrice.
+  // Working backwards: 
+  // Close[499] = currentPrice
+  // Close[498] = currentPrice - change[499] ... roughly
+
+  // Simpler approach: generating forward from a start price, then shifting everything
+  // Start price doesn't matter, we will shift later.
+  let rawPrice = 100;
+  const rawData: { open: number, close: number, high: number, low: number, volume: number }[] = [];
+
   for (let i = 0; i < 500; i++) {
-    const time = (now - (500 - i) * fiveMin);
-    const open = prevClose + (Math.random() * 4 - 2);
+    const open = rawPrice + (Math.random() * 4 - 2);
     const close = open + (Math.random() * 10 - 5);
     const high = Math.max(open, close) + Math.random() * 3;
     const low = Math.min(open, close) - Math.random() * 3;
     const volume = Math.floor(Math.random() * 1000) + 200;
-    
-    data.push({ time, open, high, low, close, volume });
-    prevClose = close;
+
+    rawData.push({ open, high, low, close, volume });
+    rawPrice = close;
   }
+
+  const lastRawClose = rawData[rawData.length - 1].close;
+  const shift = currentPrice - lastRawClose;
+
+  for (let i = 0; i < 500; i++) {
+    const time = (now - (500 - i) * fiveMin);
+    const d = rawData[i];
+    data.push({
+      time,
+      open: d.open + shift,
+      high: d.high + shift,
+      low: d.low + shift,
+      close: d.close + shift,
+      volume: d.volume
+    });
+  }
+
   return data;
 };
 
@@ -42,10 +78,12 @@ const calculateMA = (data: ChartData[], period: number) => {
   return ma;
 };
 
-const KlineChart: React.FC = () => {
+const KlineChart: React.FC<{ currentPrice?: number }> = ({ currentPrice = 185.00 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const data = useMemo(() => generateMockData(), []);
+  const data = useMemo(() => generateMockData(currentPrice), [currentPrice]); // Re-generate if currentPrice drastically changes, or just on mount? 
+  // For this demo, re-generating on mount or major price change is fine. 
+  // In a real app we would append data. Here we preserve shape but shift levels.
   const ma5 = useMemo(() => calculateMA(data, 5), [data]);
   const ma10 = useMemo(() => calculateMA(data, 10), [data]);
   const ma20 = useMemo(() => calculateMA(data, 20), [data]);
@@ -102,7 +140,7 @@ const KlineChart: React.FC = () => {
     const visibleBarCount = Math.ceil(chartWidth / barWidth);
     const endIndex = Math.max(0, data.length - Math.floor(rightOffset));
     const startIndex = Math.max(0, endIndex - visibleBarCount);
-    
+
     const visibleData = data.slice(startIndex, endIndex);
     if (visibleData.length === 0) return;
 
@@ -139,7 +177,7 @@ const KlineChart: React.FC = () => {
       const y = (chartHeight / gridSteps) * i;
       ctx.moveTo(0, y);
       ctx.lineTo(chartWidth, y);
-      
+
       const priceAtY = getPriceFromY(y);
       ctx.fillStyle = colors.text;
       ctx.font = '10px JetBrains Mono';
@@ -181,7 +219,7 @@ const KlineChart: React.FC = () => {
       const bodyBottom = getY(Math.min(d.open, d.close));
       const bodyHeight = Math.max(1, bodyBottom - bodyTop);
       const bodyWidth = Math.max(1, barWidth * 0.7);
-      
+
       ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
 
       // Volume Bars
@@ -256,7 +294,7 @@ const KlineChart: React.FC = () => {
       ctx.strokeStyle = colors.crosshair;
       ctx.setLineDash([6, 6]);
       ctx.lineWidth = 0.8;
-      
+
       // Vertical
       ctx.beginPath();
       ctx.moveTo(cursorX, 0);
@@ -282,17 +320,17 @@ const KlineChart: React.FC = () => {
       // x = chartWidth - (endIndex - i) * barWidth - barWidth/2
       // (chartWidth - x - barWidth/2) / barWidth = endIndex - i
       // i = endIndex - ((chartWidth - x - barWidth/2) / barWidth)
-      
+
       const distFromRight = chartWidth - cursorX;
       const barsFromEnd = Math.floor(distFromRight / barWidth);
       const dataIndex = endIndex - barsFromEnd - 1; // -1 adjustment
-      
+
       if (dataIndex >= startIndex && dataIndex < endIndex && data[dataIndex]) {
         const d = data[dataIndex];
         const date = new Date(d.time * 1000);
         const timeLabel = `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
         const labelX = cursorX;
-        
+
         ctx.fillStyle = '#1e222d';
         ctx.fillRect(labelX - 20, chartHeight, 40, 20);
         ctx.fillStyle = '#fff';
@@ -300,10 +338,10 @@ const KlineChart: React.FC = () => {
 
         // Update hovered data for react text overlay
         if (hoveredData !== d) {
-             // We do this in draw loop often, optimally we should do this in mousemove logic but 
-             // for simple sync, we can trigger effect or set state if actually changed.
-             // But setting state in draw loop is bad. 
-             // We will handle data identification in mouseMove instead.
+          // We do this in draw loop often, optimally we should do this in mousemove logic but 
+          // for simple sync, we can trigger effect or set state if actually changed.
+          // But setting state in draw loop is bad. 
+          // We will handle data identification in mouseMove instead.
         }
       }
     }
@@ -326,12 +364,12 @@ const KlineChart: React.FC = () => {
     if (!rect) return;
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
+
     // Crosshair logic
     // Restrict to chart area
     const chartWidth = rect.width - 60;
     const chartHeight = rect.height - 25;
-    
+
     if (x < chartWidth && y < chartHeight) {
       setCursorX(x);
       setCursorY(y);
@@ -339,11 +377,11 @@ const KlineChart: React.FC = () => {
       // Find data point
       const visibleBarCount = Math.ceil(chartWidth / barWidth);
       const endIndex = Math.max(0, data.length - Math.floor(rightOffset));
-      
+
       const distFromRight = chartWidth - x;
       const barsFromEnd = Math.floor(distFromRight / barWidth);
       const dataIndex = endIndex - barsFromEnd - 1;
-      
+
       if (dataIndex >= 0 && data[dataIndex]) {
         setHoveredData(data[dataIndex]);
       } else {
@@ -366,7 +404,7 @@ const KlineChart: React.FC = () => {
   const handleMouseUp = () => {
     setIsDragging(false);
   };
-  
+
   const handleMouseLeave = () => {
     setIsDragging(false);
     setCursorX(null);
@@ -387,8 +425,8 @@ const KlineChart: React.FC = () => {
   const displayData = hoveredData || data[data.length - 1];
 
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       className="w-full h-full bg-[#0b0e11] relative overflow-hidden cursor-crosshair"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -399,11 +437,11 @@ const KlineChart: React.FC = () => {
       <div className="absolute top-2 left-4 z-10 flex flex-wrap gap-4 text-[10px] pointer-events-none">
         {/* OHLCV Legend */}
         <div className="flex gap-3 font-mono">
-           <span className="text-gray-400">O: <span className={displayData.open > displayData.close ? 'text-rose-500' : 'text-emerald-500'}>{displayData.open.toFixed(2)}</span></span>
-           <span className="text-gray-400">H: <span className={displayData.open > displayData.close ? 'text-rose-500' : 'text-emerald-500'}>{displayData.high.toFixed(2)}</span></span>
-           <span className="text-gray-400">L: <span className={displayData.open > displayData.close ? 'text-rose-500' : 'text-emerald-500'}>{displayData.low.toFixed(2)}</span></span>
-           <span className="text-gray-400">C: <span className={displayData.open > displayData.close ? 'text-rose-500' : 'text-emerald-500'}>{displayData.close.toFixed(2)}</span></span>
-           <span className="text-gray-400">Vol: <span className='text-yellow-500'>{displayData.volume}</span></span>
+          <span className="text-gray-400">O: <span className={displayData.open > displayData.close ? 'text-rose-500' : 'text-emerald-500'}>{displayData.open.toFixed(2)}</span></span>
+          <span className="text-gray-400">H: <span className={displayData.open > displayData.close ? 'text-rose-500' : 'text-emerald-500'}>{displayData.high.toFixed(2)}</span></span>
+          <span className="text-gray-400">L: <span className={displayData.open > displayData.close ? 'text-rose-500' : 'text-emerald-500'}>{displayData.low.toFixed(2)}</span></span>
+          <span className="text-gray-400">C: <span className={displayData.open > displayData.close ? 'text-rose-500' : 'text-emerald-500'}>{displayData.close.toFixed(2)}</span></span>
+          <span className="text-gray-400">Vol: <span className='text-yellow-500'>{displayData.volume}</span></span>
         </div>
 
         {/* MA Legend */}
